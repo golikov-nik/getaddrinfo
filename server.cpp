@@ -67,7 +67,7 @@ connection::connection(server& srv_, int fd_) :
                          std::unique_lock lg(m);
                          try {
                            process_data(url);
-                         } catch (bad_connection_error&) {
+                         } catch (bad_connection_error const&) {
                            lg.unlock();
                            srv.disconnect(*this);
                            return;

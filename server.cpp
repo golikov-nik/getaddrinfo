@@ -12,7 +12,7 @@
 server::server(uint16_t port_, epoll_ctr& ctr_) :
                port(port_),
                ctr(ctr_),
-               server_fd(open_server_socket(port), ctr, [this] {
+               server_fd(open_server_socket(port), ctr, [this] (uint32_t) {
                  auto fd = accept(server_fd.fd, nullptr, nullptr);
                  auto ptr = std::make_unique<connection>(*this, fd);
                  std::unique_lock lg(m);
@@ -51,16 +51,13 @@ server::~server() = default;
 
 connection::connection(server& srv_, int fd_) :
                        srv(srv_),
-                       fd(fd_, srv.ctr, [this] {
+                       fd(fd_, srv.ctr, [this] (uint32_t events) {
                          auto n = recv(fd.fd, buf, sizeof buf, 0);
                          if (n < 0) {
                            throw std::runtime_error(std::strerror(errno));
                          }
-                         if (!n) {
+                         if ((events & EPOLLRDHUP) || (events & EPOLLERR) || (events & EPOLLHUP)) {
                            srv.disconnect(*this);
-                           return;
-                         }
-                         if (n == 1) {
                            return;
                          }
                          std::string url(buf, n);
@@ -79,7 +76,7 @@ connection::connection(server& srv_, int fd_) :
                          }
                        }),
                        timer(timerfd_create(CLOCK_MONOTONIC, 0), srv.ctr,
-                               [this] {
+                               [this] (uint32_t) {
                          srv.disconnect(*this);
                        }),
                        current_thread([this] {
@@ -124,7 +121,6 @@ connection::~connection() {
     cv.notify_all();
   }
   current_thread.join();
-  srv.disconnect(*this);
 }
 
 template <bool on>

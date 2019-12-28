@@ -26,7 +26,7 @@ struct epoll_ctr {
 };
 
 struct epolled_fd : file_descriptor {
-  using callback_t = std::function<void()>;
+  using callback_t = std::function<void(uint32_t)>;
 
   epolled_fd(int fd, epoll_ctr& ctr, callback_t cb);
   ~epolled_fd();

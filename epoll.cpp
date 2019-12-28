@@ -51,7 +51,7 @@ void epoll_ctr::poll() {
       throw std::runtime_error(std::strerror(errno));
     }
     for (int i = 0; i != n; ++i) {
-      reinterpret_cast<epolled_fd*>(events[i].data.ptr)->cb();
+      reinterpret_cast<epolled_fd*>(events[i].data.ptr)->cb(events[i].events);
     }
   }
 }

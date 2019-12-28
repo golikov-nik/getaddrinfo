@@ -64,9 +64,18 @@ connection::connection(server& srv_, int fd_) :
                          }
                          std::string url(buf, n);
                          std::unique_lock lg(m);
-                         queries.push(url);
-                         has_work = true;
-                         cv.notify_all();
+                         try {
+                           process_data(url);
+                         } catch (bad_connection_error&) {
+                           lg.unlock();
+                           srv.disconnect(*this);
+                           return;
+                         } catch (...) {
+                           std::cout << "unexpected error occurred" <<std::endl;
+                         }
+                         if (has_work) {
+                           cv.notify_all();
+                         }
                        }),
                        timer(timerfd_create(CLOCK_MONOTONIC, 0), srv.ctr,
                                [this] {
@@ -96,10 +105,12 @@ connection::connection(server& srv_, int fd_) :
                              processed = "An error occurred while processing"
                                           " address " + url + "\n";
                            }
-                           auto result = send(fd.fd, processed.c_str(),
-                                   processed.size(), 0);
-                           if (result < 0) {
-                             std::cout << std::strerror(errno) << std::endl;
+                           if (srv.connections.count(this)) {
+                             auto result = send(fd.fd, processed.c_str(),
+                                                processed.size(), 0);
+                             if (result < 0) {
+                               std::cout << std::strerror(errno) << std::endl;
+                             }
                            }
                          }
                        }) {}
@@ -124,13 +135,32 @@ void connection::update_timer() {
   }
 }
 
-std::string server::getaddrinfo(std::string query) {
-  auto bad_char = [](char ch) {
-    return ch == '\r' || ch == '\n' || !ch;
+void connection::process_data(std::string const& url) {
+  auto is_ok = [](char ch) {
+    char const* CHARS = "_.\\-~";
+    auto i = static_cast<unsigned char>(ch);
+    return std::isalpha(i) || std::isdigit(i) ||
+      strchr(CHARS, ch);
   };
-  while (!query.empty() && bad_char(query.back())) {
-    query.pop_back();
+  for (auto ch : url) {
+    if (prefix.size() >= BUF_SIZE) {
+      std::cout << "too long query" << std::endl;
+      throw bad_connection_error();
+    }
+    if (!is_ok(ch)) {
+      if (prefix.empty()) {
+        continue;
+      }
+      queries.push(prefix);
+      has_work = true;
+      prefix.clear();
+    } else {
+      prefix += ch;
+    }
   }
+}
+
+std::string server::getaddrinfo(std::string const& query) {
   addrinfo* result{};
   addrinfo hints{};
   hints.ai_family = AF_INET;
@@ -152,7 +182,6 @@ std::string server::getaddrinfo(std::string query) {
 
 void server::disconnect(connection& conn) {
   connections.erase(&conn);
-
 }
 
 addrinfo_guard::~addrinfo_guard() {

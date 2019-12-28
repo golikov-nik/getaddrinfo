@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <atomic>
 
 struct connection;
 
@@ -32,7 +33,7 @@ struct server {
   void disconnect(connection& conn);
 
   static int open_server_socket(uint16_t port);
-  static std::string getaddrinfo(std::string query);
+  static std::string getaddrinfo(const std::string& query);
 };
 
 struct connection {
@@ -44,18 +45,23 @@ struct connection {
  private:
   template <bool on>
   void update_timer();
+  void process_data(std::string const& url);
 
   server& srv;
   epolled_fd fd;
   epolled_fd timer;
   std::mutex m;
   char buf[BUF_SIZE];
+  std::string prefix;
   std::queue<std::string> queries;
   bool has_work{};
   bool cancel{};
+  std::atomic<bool> have_mutex{};
   std::condition_variable cv;
   std::thread current_thread;
 };
+
+struct bad_connection_error : std::exception {};
 
 struct addrinfo_guard {
   addrinfo** info{};

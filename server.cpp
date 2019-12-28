@@ -132,8 +132,12 @@ std::string server::getaddrinfo(std::string query) {
     query.pop_back();
   }
   addrinfo* result{};
+  addrinfo hints{};
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+
   addrinfo_guard g{&result};
-  auto r = ::getaddrinfo(query.c_str(), nullptr, nullptr, &result);
+  auto r = ::getaddrinfo(query.c_str(), "80", &hints, &result);
   if (r) {
     return "";
   }

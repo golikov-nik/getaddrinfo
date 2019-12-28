@@ -29,6 +29,7 @@ struct server {
   epoll_ctr& ctr;
   epolled_fd server_fd;
   std::map<connection*, std::unique_ptr<connection>> connections;
+  std::mutex m;
 
   void disconnect(connection& conn);
 

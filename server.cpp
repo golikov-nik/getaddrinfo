@@ -15,6 +15,7 @@ server::server(uint16_t port_, epoll_ctr& ctr_) :
                server_fd(open_server_socket(port), ctr, [this] {
                  auto fd = accept(server_fd.fd, nullptr, nullptr);
                  auto ptr = std::make_unique<connection>(*this, fd);
+                 std::unique_lock lg(m);
                  connections.insert(std::make_pair(ptr.get(), std::move(ptr)));
                }) {}
 
@@ -105,6 +106,7 @@ connection::connection(server& srv_, int fd_) :
                              processed = "An error occurred while processing"
                                           " address " + url + "\n";
                            }
+                           std::unique_lock lg_s(srv.m);
                            if (srv.connections.count(this)) {
                              auto result = send(fd.fd, processed.c_str(),
                                                 processed.size(), 0);
@@ -181,6 +183,7 @@ std::string server::getaddrinfo(std::string const& query) {
 }
 
 void server::disconnect(connection& conn) {
+  std::unique_lock lg(m);
   connections.erase(&conn);
 }
 

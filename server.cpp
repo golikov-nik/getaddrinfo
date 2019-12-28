@@ -50,7 +50,6 @@ server::~server() = default;
 
 connection::connection(server& srv_, int fd_) :
                        srv(srv_),
-                       ts{{0, 0}, {TIMEOUT, 0}},
                        fd(fd_, srv.ctr, [this] {
                          auto n = recv(fd.fd, buf, sizeof buf, 0);
                          if (n < 0) {
@@ -74,6 +73,7 @@ connection::connection(server& srv_, int fd_) :
                          srv.disconnect(*this);
                        }),
                        current_thread([this] {
+                         update_timer<true>();
                          while (true) {
                            std::unique_lock lg(m);
                            cv.wait(lg, [this] {
@@ -84,12 +84,13 @@ connection::connection(server& srv_, int fd_) :
                            }
                            auto url = queries.front();
                            queries.pop();
+                           update_timer<false>();
                            lg.unlock();
                            auto processed = server::getaddrinfo(url);
                            lg.lock();
                            has_work = !queries.empty();
                            if (!has_work) {
-                             refresh_timer();
+                             update_timer<true>();
                            }
                            if (processed.empty()) {
                              processed = "An error occurred while processing"
@@ -113,7 +114,10 @@ connection::~connection() {
   srv.disconnect(*this);
 }
 
-void connection::refresh_timer() {
+template <bool on>
+void connection::update_timer() {
+  constexpr itimerspec ts{{0, 0},
+                          {on ? TIMEOUT : 0, 0}};
   auto r = timerfd_settime(timer.fd, 0, &ts,  nullptr);
   if (r) {
     std::cout << std::strerror(errno) << std::endl;

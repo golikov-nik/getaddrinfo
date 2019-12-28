@@ -42,10 +42,10 @@ struct connection {
   static size_t const BUF_SIZE = 1024;
   static size_t const TIMEOUT = 5 * 60;
  private:
-  void refresh_timer();
+  template <bool on>
+  void update_timer();
 
   server& srv;
-  itimerspec ts;
   epolled_fd fd;
   epolled_fd timer;
   std::mutex m;
